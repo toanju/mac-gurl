@@ -237,7 +237,6 @@ class Gurl(NSObject):
 
         self.follow_redirects = options.get('follow_redirects', False)
         self.ignore_system_proxy = options.get('ignore_system_proxy', False)
-        self.destination_path = options.get('file')
         self.can_resume = options.get('can_resume', False)
         self.url = options.get('url')
         self.additional_headers = options.get('additional_headers', {})
@@ -261,21 +260,17 @@ class Gurl(NSObject):
         self.SSLerror = None
         self.done = False
         self.redirection = []
-        self.destination = None
         self.bytesReceived = 0
         self.expectedLength = -1
         self.percentComplete = 0
         self.connection = None
         self.session = None
         self.task = None
+        self.received_data = bytearray()
         return self
 
     def start(self):
         '''Start the connection'''
-        if not self.destination_path:
-            self.log('No output file specified.')
-            self.done = True
-            return
         url = NSURL.URLWithString_(self.url)
         request = (
             NSMutableURLRequest.requestWithURL_cachePolicy_timeoutInterval_(
@@ -284,24 +279,7 @@ class Gurl(NSObject):
         if self.additional_headers:
             for header, value in self.additional_headers.items():
                 request.setValue_forHTTPHeaderField_(value, header)
-        # does the file already exist? See if we can resume a partial download
-        if os.path.isfile(self.destination_path):
-            stored_data = self.getStoredHeaders()
-            if (self.can_resume and 'expected-length' in stored_data and
-                    ('last-modified' in stored_data or 'etag' in stored_data)):
-                # we have a partial file and we're allowed to resume
-                self.resume = True
-                local_filesize = os.path.getsize(self.destination_path)
-                byte_range = 'bytes=%s-' % local_filesize
-                request.setValue_forHTTPHeaderField_(byte_range, 'Range')
-        if self.download_only_if_changed and not self.resume:
-            stored_data = self.cache_data or self.getStoredHeaders()
-            if 'last-modified' in stored_data:
-                request.setValue_forHTTPHeaderField_(
-                    stored_data['last-modified'], 'if-modified-since')
-            if 'etag' in stored_data:
-                request.setValue_forHTTPHeaderField_(
-                    stored_data['etag'], 'if-none-match')
+
         if NSURLSESSION_AVAILABLE:
             configuration = (
                 NSURLSessionConfiguration.defaultSessionConfiguration())
@@ -344,56 +322,6 @@ class Gurl(NSObject):
             NSDate.dateWithTimeIntervalSinceNow_(.1))
         return self.done
 
-    def getStoredHeaders(self):
-        '''Returns any stored headers for self.destination_path'''
-        # try to read stored headers
-        try:
-            stored_plist_bytestr = xattr.getxattr(
-                self.destination_path, self.GURL_XATTR)
-        except (KeyError, IOError):
-            return {}
-        data = NSData.dataWithBytes_length_(
-            stored_plist_bytestr, len(stored_plist_bytestr))
-        dataObject, _plistFormat, error = (
-            NSPropertyListSerialization.
-            propertyListFromData_mutabilityOption_format_errorDescription_(
-                data, NSPropertyListMutableContainersAndLeaves, None, None))
-        if error:
-            return {}
-        return dataObject
-
-    def storeHeaders_(self, headers):
-        '''Store dictionary data as an xattr for self.destination_path'''
-        plistData, error = (
-            NSPropertyListSerialization.
-            dataFromPropertyList_format_errorDescription_(
-                headers, NSPropertyListXMLFormat_v1_0, None))
-        if error:
-            byte_string = b''
-        else:
-            try:
-                byte_string = bytes(plistData)
-            except NameError:
-                byte_string = str(plistData)
-        try:
-            xattr.setxattr(self.destination_path, self.GURL_XATTR, byte_string)
-        except IOError as err:
-            self.log('Could not store metadata to %s: %s'
-                     % (self.destination_path, err))
-
-    def normalizeHeaderDict_(self, a_dict):
-        '''Since HTTP header names are not case-sensitive, we normalize a
-        dictionary of HTTP headers by converting all the key names to
-        lower case'''
-
-        # yes, we don't use 'self'!
-        # pylint: disable=R0201
-
-        new_dict = {}
-        for key, value in a_dict.items():
-            new_dict[key.lower()] = value
-        return new_dict
-
     def recordError_(self, error):
         '''Record any error info from completed connection/session'''
         self.error = error
@@ -405,24 +333,10 @@ class Gurl(NSObject):
                 self.SSLerror = (ssl_code, ssl_error_codes.get(
                     ssl_code, 'Unknown SSL error'))
 
-    def removeExpectedSizeFromStoredHeaders(self):
-        '''If a successful transfer, clear the expected size so we
-        don\'t attempt to resume the download next time'''
-        if str(self.status).startswith('2'):
-            # remove the expected-size from the stored headers
-            headers = self.getStoredHeaders()
-            if 'expected-length' in headers:
-                del headers['expected-length']
-                self.storeHeaders_(headers)
-
     def URLSession_task_didCompleteWithError_(self, _session, _task, error):
         '''NSURLSessionTaskDelegate method.'''
-        if self.destination and self.destination_path:
-            self.destination.close()
         if error:
             self.recordError_(error)
-        else:
-            self.removeExpectedSizeFromStoredHeaders()
         self.done = True
 
     def connection_didFailWithError_(self, _connection, error):
@@ -430,16 +344,11 @@ class Gurl(NSObject):
         Sent when a connection fails to load its request successfully.'''
         self.recordError_(error)
         self.done = True
-        if self.destination and self.destination_path:
-            self.destination.close()
 
     def connectionDidFinishLoading_(self, _connection):
         '''NSURLConnectionDataDelegate method
         Sent when a connection has finished loading successfully.'''
         self.done = True
-        if self.destination and self.destination_path:
-            self.destination.close()
-            self.removeExpectedSizeFromStoredHeaders()
 
     def handleResponse_withCompletionHandler_(
             self, response, completionHandler):
@@ -449,64 +358,10 @@ class Gurl(NSObject):
         self.percentComplete = -1
         self.expectedLength = response.expectedContentLength()
 
-        download_data = {}
         if response.className() == u'NSHTTPURLResponse':
             # Headers and status code only available for HTTP/S transfers
             self.status = response.statusCode()
             self.headers = dict(response.allHeaderFields())
-            normalized_headers = self.normalizeHeaderDict_(self.headers)
-            if 'last-modified' in normalized_headers:
-                download_data['last-modified'] = normalized_headers[
-                    'last-modified']
-            if 'etag' in normalized_headers:
-                download_data['etag'] = normalized_headers['etag']
-            download_data['expected-length'] = self.expectedLength
-
-        # self.destination is defined in initWithOptions_
-        # pylint: disable=E0203
-
-        if not self.destination and self.destination_path:
-            if self.status == 206 and self.resume:
-                # 206 is Partial Content response
-                stored_data = self.getStoredHeaders()
-                if (not stored_data or
-                        stored_data.get('etag') != download_data.get('etag') or
-                        stored_data.get('last-modified') != download_data.get(
-                            'last-modified')):
-                    # file on server is different than the one
-                    # we have a partial for
-                    self.log(
-                        'Can\'t resume download; file on server has changed.')
-                    if completionHandler:
-                        # tell the session task to cancel
-                        completionHandler(NSURLSessionResponseCancel)
-                    else:
-                        # cancel the connection
-                        self.connection.cancel()
-                    self.log('Removing %s' % self.destination_path)
-                    os.unlink(self.destination_path)
-                    # restart and attempt to download the entire file
-                    self.log(
-                        'Restarting download of %s' % self.destination_path)
-                    os.unlink(self.destination_path)
-                    self.start()
-                    return
-                # try to resume
-                self.log('Resuming download for %s' % self.destination_path)
-                # add existing file size to bytesReceived so far
-                local_filesize = os.path.getsize(self.destination_path)
-                self.bytesReceived = local_filesize
-                self.expectedLength += local_filesize
-                # open file for append
-                self.destination = open(self.destination_path, 'ab')
-
-            elif str(self.status).startswith('2'):
-                # not resuming, just open the file for writing
-                self.destination = open(self.destination_path, 'wb')
-                # store some headers with the file for use if we need to resume
-                # the download and for future checking if the file on the server
-                # has changed
-                self.storeHeaders_(download_data)
 
         if completionHandler:
             # tell the session task to continue
@@ -828,13 +683,7 @@ class Gurl(NSObject):
 
     def handleReceivedData_(self, data):
         '''Handle received data'''
-        if self.destination:
-            self.destination.write(data)
-        else:
-            try:
-                self.log(str(data))
-            except Exception:
-                pass
+        self.received_data.extend(data)
         self.bytesReceived += len(data)
         if self.expectedLength != NSURLResponseUnknownLength:
             # pylint: disable=old-division
@@ -850,7 +699,3 @@ class Gurl(NSObject):
         '''NSURLConnectionDataDelegate method
         Sent as a connection loads data incrementally'''
         self.handleReceivedData_(data)
-
-
-if __name__ == '__main__':
-    print('This is a library of support tools for the Munki Suite.')
