@@ -1,0 +1,11 @@
+[project]
+name = "mac-gurl"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "asn1crypto>=1.5.1",
+    "pyobjc>=11.0",
+    "xattr>=1.1.4",
+]
