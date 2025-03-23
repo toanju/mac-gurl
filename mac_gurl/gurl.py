@@ -255,7 +255,6 @@ class Gurl(NSObject):
         self.username = options.get("username")
         self.password = options.get("password")
         self.download_only_if_changed = options.get("download_only_if_changed", False)
-        self.cache_data = options.get("cache_data")
         self.connection_timeout = options.get("connection_timeout", 60)
         if NSURLSESSION_AVAILABLE:
             self.minimum_tls_protocol = options.get(
