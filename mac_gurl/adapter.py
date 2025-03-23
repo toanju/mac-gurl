@@ -1,3 +1,4 @@
+import logging
 from io import BytesIO
 
 from Foundation import NSHTTPURLResponse
@@ -12,6 +13,8 @@ from .gurl import Gurl
 class MacHTTPAdapter(HTTPAdapter):
     def __init__(self, *args, **kwargs):
         super(MacHTTPAdapter, self).__init__(*args, **kwargs)
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
 
     def send(
         self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None
@@ -37,9 +40,9 @@ class MacHTTPAdapter(HTTPAdapter):
             "can_resume": False,
             "additional_headers": request.headers,
             "download_only_if_changed": False,
-            "logging_function": print,
+            "logging_function": self.logger.debug,
         }
-        print("Options: %s" % options)
+        self.logger.debug("Options: %s" % options)
 
         connection = Gurl.alloc().initWithOptions_(options)
         stored_percent_complete = -1
@@ -53,7 +56,7 @@ class MacHTTPAdapter(HTTPAdapter):
                 if message and connection.status and connection.status != 304:
                     # log always, display if verbose is 1 or more
                     # also display in MunkiStatus detail field
-                    print(message)
+                    self.logger.debug(message)
                     # now clear message so we don't display it again
                     message = None
                 if (
@@ -63,11 +66,11 @@ class MacHTTPAdapter(HTTPAdapter):
                     if connection.percentComplete != stored_percent_complete:
                         # display percent done if it has changed
                         stored_percent_complete = connection.percentComplete
-                        print(stored_percent_complete, 100)
+                        self.logger.debug(stored_percent_complete, 100)
                 elif connection.bytesReceived != stored_bytes_received:
                     # if we don't have percent done info, log bytes received
                     stored_bytes_received = connection.bytesReceived
-                    print("Bytes received: %s" % stored_bytes_received)
+                    self.logger.debug("Bytes received: %s" % stored_bytes_received)
                 if connection_done:
                     break
 
@@ -79,28 +82,28 @@ class MacHTTPAdapter(HTTPAdapter):
             # Let us out! ... Safely! Unexpectedly quit dialogs are annoying...
             connection.cancel()
             # Re-raise the error as a GurlError
-            print(err)
+            self.logger.error(err)
             raise
 
         if connection.error is not None:
             # gurl returned an error
-            print(
+            self.logger.debug(
                 "Download error %s: %s" % connection.error.code(),
                 connection.error.localizedDescription(),
             )
             if connection.SSLerror:
-                print("SSL error detail: %s" % str(connection.SSLerror))
+                self.logger.error("SSL error detail: %s" % str(connection.SSLerror))
                 # keychain.debug_output()
-            print("Headers: %s", connection.headers)
+            self.logger.debug("Headers: %s", connection.headers)
             raise ConnectionError(
                 connection.error.code(), connection.error.localizedDescription()
             )
 
         if connection.response is not None:
-            print("Status: %s" % connection.status)
-            print("Headers: %s" % connection.headers)
+            self.logger.debug("Status: %s" % connection.status)
+            self.logger.debug("Headers: %s" % connection.headers)
         if connection.redirection != []:
-            print("Redirection: %s", connection.redirection)
+            self.logger.debug("Redirection: %s", connection.redirection)
 
         description = NSHTTPURLResponse.localizedStringForStatusCode_(connection.status)
 
