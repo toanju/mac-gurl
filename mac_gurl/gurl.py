@@ -54,7 +54,6 @@ from Foundation import (
     NSMutableURLRequest,
     NSObject,
     NSRunLoop,
-    NSURLConnection,
     NSURLCredential,
     NSURLCredentialPersistenceNone,
     NSURLRequestReloadIgnoringLocalCacheData,
@@ -94,62 +93,54 @@ objc.registerMetaDataForSelector(
     },
 )
 
-try:
-    from CFNetwork import kCFNetworkProxiesHTTPEnable, kCFNetworkProxiesHTTPSEnable
-    from Foundation import (
-        NSURLCredentialPersistenceForSession,
-        NSURLSession,
-        NSURLSessionConfiguration,
-    )
-
-    NSURLSESSION_AVAILABLE = True
-except ImportError:
-    NSURLSESSION_AVAILABLE = False
+from CFNetwork import kCFNetworkProxiesHTTPEnable, kCFNetworkProxiesHTTPSEnable
+from Foundation import (
+    NSURLCredentialPersistenceForSession,
+    NSURLSession,
+    NSURLSessionConfiguration,
+)
 
 # Disable PyLint complaining about 'invalid' names
 # pylint: disable=C0103
 
-if NSURLSESSION_AVAILABLE:
-    # NSURLSessionAuthChallengeDisposition enum constants
-    NSURLSessionAuthChallengeUseCredential = 0
-    NSURLSessionAuthChallengePerformDefaultHandling = 1
-    NSURLSessionAuthChallengeCancelAuthenticationChallenge = 2
-    NSURLSessionAuthChallengeRejectProtectionSpace = 3
+# NSURLSessionAuthChallengeDisposition enum constants
+NSURLSessionAuthChallengeUseCredential = 0
+NSURLSessionAuthChallengePerformDefaultHandling = 1
+NSURLSessionAuthChallengeCancelAuthenticationChallenge = 2
+NSURLSessionAuthChallengeRejectProtectionSpace = 3
 
-    # NSURLSessionResponseDisposition enum constants
-    NSURLSessionResponseCancel = 0
-    NSURLSessionResponseAllow = 1
-    NSURLSessionResponseBecomeDownload = 2
+# NSURLSessionResponseDisposition enum constants
+NSURLSessionResponseCancel = 0
+NSURLSessionResponseAllow = 1
+NSURLSessionResponseBecomeDownload = 2
 
-    # TLS/SSLProtocol enum constants
-    kSSLProtocolUnknown = 0
-    kSSLProtocol3 = 2
-    kTLSProtocol1 = 4
-    kTLSProtocol11 = 7
-    kTLSProtocol12 = 8
-    kDTLSProtocol1 = 9
+# TLS/SSLProtocol enum constants
+kSSLProtocolUnknown = 0
+kSSLProtocol3 = 2
+kTLSProtocol1 = 4
+kTLSProtocol11 = 7
+kTLSProtocol12 = 8
+kDTLSProtocol1 = 9
 
-    # define a helper function for block callbacks
-    import ctypes
+# define a helper function for block callbacks
+import ctypes
 
-    import objc
+CALLBACK_HELPER_AVAILABLE = True
+try:
+    _objc_so = ctypes.cdll.LoadLibrary(os.path.join(objc.__path__[0], "_objc.so"))
+except OSError:
+    # could not load _objc.so
+    CALLBACK_HELPER_AVAILABLE = False
+else:
+    PyObjCMethodSignature_WithMetaData = _objc_so.PyObjCMethodSignature_WithMetaData
+    PyObjCMethodSignature_WithMetaData.restype = ctypes.py_object
 
-    CALLBACK_HELPER_AVAILABLE = True
-    try:
-        _objc_so = ctypes.cdll.LoadLibrary(os.path.join(objc.__path__[0], "_objc.so"))
-    except OSError:
-        # could not load _objc.so
-        CALLBACK_HELPER_AVAILABLE = False
-    else:
-        PyObjCMethodSignature_WithMetaData = _objc_so.PyObjCMethodSignature_WithMetaData
-        PyObjCMethodSignature_WithMetaData.restype = ctypes.py_object
-
-        def objc_method_signature(signature_str):
-            """Return a PyObjCMethodSignature given a call signature in string
-            format"""
-            return PyObjCMethodSignature_WithMetaData(
-                ctypes.create_string_buffer(signature_str), None, False
-            )
+    def objc_method_signature(signature_str):
+        """Return a PyObjCMethodSignature given a call signature in string
+        format"""
+        return PyObjCMethodSignature_WithMetaData(
+            ctypes.create_string_buffer(signature_str), None, False
+        )
 
 # pylint: enable=E0611
 
@@ -247,10 +238,7 @@ class Gurl(NSObject):
         self.password = options.get("password")
         self.download_only_if_changed = options.get("download_only_if_changed", False)
         self.connection_timeout = options.get("connection_timeout", 60)
-        if NSURLSESSION_AVAILABLE:
-            self.minimum_tls_protocol = options.get(
-                "minimum_tls_protocol", kTLSProtocol1
-            )
+        self.minimum_tls_protocol = options.get("minimum_tls_protocol", kTLSProtocol1)
 
         self.log = options.get("logging_function", NSLogWrapper)
 
@@ -281,40 +269,30 @@ class Gurl(NSObject):
             for header, value in self.additional_headers.items():
                 request.setValue_forHTTPHeaderField_(value, header)
 
-        if NSURLSESSION_AVAILABLE:
-            configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
+        configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
 
-            # optional: ignore system http/https proxies (10.9+ only)
-            if self.ignore_system_proxy is True:
-                configuration.setConnectionProxyDictionary_(
-                    {
-                        kCFNetworkProxiesHTTPEnable: False,
-                        kCFNetworkProxiesHTTPSEnable: False,
-                    }
-                )
-
-            # set minimum supported TLS protocol (defaults to TLS1)
-            configuration.setTLSMinimumSupportedProtocol_(self.minimum_tls_protocol)
-
-            self.session = (
-                NSURLSession.sessionWithConfiguration_delegate_delegateQueue_(
-                    configuration, self, None
-                )
+        # optional: ignore system http/https proxies (10.9+ only)
+        if self.ignore_system_proxy is True:
+            configuration.setConnectionProxyDictionary_(
+                {
+                    kCFNetworkProxiesHTTPEnable: False,
+                    kCFNetworkProxiesHTTPSEnable: False,
+                }
             )
-            self.task = self.session.dataTaskWithRequest_(request)
-            self.task.resume()
-        else:
-            self.connection = NSURLConnection.alloc().initWithRequest_delegate_(
-                request, self
-            )
+
+        # set minimum supported TLS protocol (defaults to TLS1)
+        configuration.setTLSMinimumSupportedProtocol_(self.minimum_tls_protocol)
+
+        self.session = NSURLSession.sessionWithConfiguration_delegate_delegateQueue_(
+            configuration, self, None
+        )
+        self.task = self.session.dataTaskWithRequest_(request)
+        self.task.resume()
 
     def cancel(self):
         """Cancel the connection"""
         if self.connection:
-            if NSURLSESSION_AVAILABLE:
-                self.session.invalidateAndCancel()
-            else:
-                self.connection.cancel()
+            self.session.invalidateAndCancel()
             self.done = True
 
     def isDone(self):
@@ -474,40 +452,6 @@ class Gurl(NSObject):
         return self.handleRedirect_newRequest_withCompletionHandler_(
             response, request, None
         )
-
-    def connection_canAuthenticateAgainstProtectionSpace_(
-        self, _connection, protectionSpace
-    ):
-        """NSURLConnection delegate method
-        Sent to determine whether the delegate is able to respond to a
-        protection space’s form of authentication.
-        Deprecated in 10.10"""
-        # this is not called in 10.5.x.
-        self.log("connection_canAuthenticateAgainstProtectionSpace_")
-        if protectionSpace:
-            host = protectionSpace.host()
-            realm = protectionSpace.realm()
-            authenticationMethod = protectionSpace.authenticationMethod()
-            self.log(
-                "Protection space found. Host: %s Realm: %s AuthMethod: %s"
-                % (host, realm, authenticationMethod)
-            )
-            if (
-                self.username
-                and self.password
-                and authenticationMethod
-                in [
-                    "NSURLAuthenticationMethodDefault",
-                    "NSURLAuthenticationMethodHTTPBasic",
-                    "NSURLAuthenticationMethodHTTPDigest",
-                ]
-            ):
-                # we know how to handle this
-                self.log("Can handle this authentication request")
-                return True
-        # we don't know how to handle this; let the OS try
-        self.log("Allowing OS to handle authentication request")
-        return False
 
     # getCertRefs_ takes a certificate ref, and attempts to construct the certificate chain.
     # this requires that any certificates in the chain, are present in the Keychain.
@@ -695,15 +639,6 @@ class Gurl(NSObject):
                         challenge
                     )
 
-    def connection_willSendRequestForAuthenticationChallenge_(
-        self, _connection, challenge
-    ):
-        """NSURLConnection delegate method
-        Tells the delegate that the connection will send a request for an
-        authentication challenge. New in 10.7."""
-        self.log("connection_willSendRequestForAuthenticationChallenge_")
-        self.handleChallenge_withCompletionHandler_(challenge, None)
-
     def URLSession_task_didReceiveChallenge_completionHandler_(
         self, _session, _task, challenge, completionHandler
     ):
@@ -712,13 +647,6 @@ class Gurl(NSObject):
             completionHandler.__block_signature__ = objc_method_signature(b"v@i@")
         self.log("URLSession_task_didReceiveChallenge_completionHandler_")
         self.handleChallenge_withCompletionHandler_(challenge, completionHandler)
-
-    def connection_didReceiveAuthenticationChallenge_(self, _connection, challenge):
-        """NSURLConnection delegate method
-        Sent when a connection must authenticate a challenge in order to
-        download its request. Deprecated in 10.10"""
-        self.log("connection_didReceiveAuthenticationChallenge_")
-        self.handleChallenge_withCompletionHandler_(challenge, None)
 
     def handleReceivedData_(self, data):
         """Handle received data"""
