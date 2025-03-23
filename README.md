@@ -27,12 +27,14 @@ Details on the HTTPAdapter are described in the [docs of requests](https://reque
 
 ## Run an example script
 
+TODO this needs to be updated
+
 ```bash
-PYTHONPATH=. uv run example/cam.py
+PYTHONPATH=. uv run example/example.py
 
 # or by sourcing the venv
 . .venv/bin/activate
-PYTHONPATH=. python example/cam.py
+PYTHONPATH=. python example/example.py
 ```
 
 ## Development
