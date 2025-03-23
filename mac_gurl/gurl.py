@@ -47,13 +47,14 @@ from asn1crypto.x509 import Certificate, Name
 # No name 'Foo' in module 'Bar' warnings. Disable them.
 # pylint: disable=E0611
 from Foundation import (
-    NSURL,
     NSBundle,
     NSDate,
+    NSHTTPURLResponse,
     NSLog,
     NSMutableURLRequest,
     NSObject,
     NSRunLoop,
+    NSURL,
     NSURLCredential,
     NSURLCredentialPersistenceNone,
     NSURLRequestReloadIgnoringLocalCacheData,
@@ -246,6 +247,7 @@ class Gurl(NSObject):
         self.response = None
         self.headers = None
         self.status = None
+        self.description = ""
         self.error = None
         self.SSLerror = None
         self.done = False
@@ -349,6 +351,7 @@ class Gurl(NSObject):
         if response.className() == "NSHTTPURLResponse":
             # Headers and status code only available for HTTP/S transfers
             self.status = response.statusCode()
+            self.description = NSHTTPURLResponse.localizedStringForStatusCode_(self.status)
             self.headers = dict(response.allHeaderFields())
 
         if completionHandler:

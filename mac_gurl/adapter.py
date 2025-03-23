@@ -1,7 +1,6 @@
 import logging
 from io import BytesIO
 
-from Foundation import NSHTTPURLResponse
 from requests import Response
 from requests.adapters import HTTPAdapter
 from requests.structures import CaseInsensitiveDict
@@ -105,7 +104,7 @@ class MacHTTPAdapter(HTTPAdapter):
         if connection.redirection != []:
             self.logger.debug("Redirection: %s", connection.redirection)
 
-        description = NSHTTPURLResponse.localizedStringForStatusCode_(connection.status)
+        description = connection.description
 
         response = Response()
 
