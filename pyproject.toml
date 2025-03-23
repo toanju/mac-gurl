@@ -3,15 +3,17 @@ name = "mac-gurl"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.9"
 dependencies = [
-    "asn1crypto>=1.5.1",
-    "pyobjc>=11.0",
-    "requests>=2.32.3",
-    "xattr>=1.1.4",
+  "asn1crypto>=1.5.1",
+  "pyobjc>=11.0",
+  "requests>=2.32.3",
+  "xattr>=1.1.4",
 ]
 
 [dependency-groups]
-dev = [
-    "ruff>=0.9.7",
-]
+dev = ["ruff>=0.9.7"]
+
+[tool.ruff]
+# Assume Python 3.9
+target-version = "py39"

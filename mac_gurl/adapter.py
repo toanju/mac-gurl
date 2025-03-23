@@ -6,9 +6,7 @@ from requests.adapters import HTTPAdapter
 from requests.structures import CaseInsensitiveDict
 from requests.utils import get_encoding_from_headers
 
-from pprint import pprint
-
-from mac_gurl.gurl import Gurl
+from .gurl import Gurl
 
 
 class MacHTTPAdapter(HTTPAdapter):
@@ -18,16 +16,6 @@ class MacHTTPAdapter(HTTPAdapter):
     def send(
         self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None
     ):
-        # def _get_url(
-        #    self,
-        #    url,
-        #    custom_headers=None,
-        #    message=None,
-        #    onlyifnewer=False,
-        #    resume=False,
-        #    follow_redirects=False,
-        #    pkginfo=None,
-        # ):
         """Gets an HTTP or HTTPS URL and stores it in
         destination path. Returns a dictionary of headers, which includes
         http_result_code and http_result_description.
@@ -132,6 +120,7 @@ class MacHTTPAdapter(HTTPAdapter):
         if isinstance(request.url, bytes):
             response.url = request.url.decode("utf-8")
         else:
+            assert response.url is None
             response.url = request.url
 
         # Add new cookies from the server.
@@ -142,13 +131,3 @@ class MacHTTPAdapter(HTTPAdapter):
         response.connection = self
 
         return response
-
-
-if __name__ == "__main__":
-    import requests
-
-    s = requests.Session()
-    s.mount("https://", MacHTTPAdapter())
-
-    resp = s.get("https://spc.ondemand.com/cam/api/v1/profile_requests?user=I554517")
-    pprint(resp.json())

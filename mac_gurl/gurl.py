@@ -30,12 +30,7 @@ from __future__ import absolute_import, print_function
 
 import os
 
-try:
-    # Python 2
-    from urlparse import urlparse
-except ImportError:
-    # Python 3
-    from urllib.parse import urlparse
+from urllib.parse import urlparse
 
 
 # builtin super doesn't work with Cocoa classes in recent PyObjC releases.
@@ -54,14 +49,10 @@ from asn1crypto.x509 import Certificate, Name
 from Foundation import (
     NSURL,
     NSBundle,
-    NSData,
     NSDate,
     NSLog,
     NSMutableURLRequest,
     NSObject,
-    NSPropertyListMutableContainersAndLeaves,
-    NSPropertyListSerialization,
-    NSPropertyListXMLFormat_v1_0,
     NSRunLoop,
     NSURLConnection,
     NSURLCredential,
@@ -463,8 +454,7 @@ class Gurl(NSObject):
     ):
         """NSURLSessionTaskDelegate method"""
         self.log(
-            "URLSession_task_willPerformHTTPRedirection_newRequest_"
-            "completionHandler_"
+            "URLSession_task_willPerformHTTPRedirection_newRequest_completionHandler_"
         )
         if CALLBACK_HELPER_AVAILABLE:
             completionHandler.__block_signature__ = objc_method_signature(b"v@@")
@@ -529,7 +519,7 @@ class Gurl(NSObject):
             return None
 
         evaluated, evalErr = SecTrustEvaluateWithError(trust, None)
-        if evalErr != None:
+        if evalErr is not None:
             return None
 
         certRefs = []
@@ -645,7 +635,7 @@ class Gurl(NSObject):
                 # if we get a chain result back from the keychain
                 # also use the subjects of issuing CAs as part of the trust evaluation
                 certChainRefs = self.getCertChainRefs_(cert_ref)
-                if certChainRefs != None:
+                if certChainRefs is not None:
                     for c in certChainRefs:
                         cert_data = SecCertificateCopyData(c)
                         cert = Certificate.load(cert_data.bytes().tobytes())
