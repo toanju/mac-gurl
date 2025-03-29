@@ -2,6 +2,8 @@
 name = "mac-gurl"
 version = "0.1.0"
 description = "Add your description here"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [

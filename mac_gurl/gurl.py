@@ -28,25 +28,20 @@ curl replacement using NSURLConnection and friends
 
 from __future__ import absolute_import, print_function
 
+import ctypes
 import os
-
 from urllib.parse import urlparse
 
-
 # builtin super doesn't work with Cocoa classes in recent PyObjC releases.
-# pylint: disable=redefined-builtin,no-name-in-module
 # patch the credentialWithIdentity:certificates:persistence: signature
 # see https://github.com/ronaldoussoren/pyobjc/issues/320#issuecomment-784278944
 # more changes May 2022 to work around some issues with PyObjC 8.5 and
 # macOS Mojave (and presumably earlier)
 import objc
 from asn1crypto.x509 import Certificate, Name
-
-# pylint: enable=redefined-builtin,no-name-in-module
-# PyLint cannot properly find names inside Cocoa libraries, so issues bogus
-# No name 'Foo' in module 'Bar' warnings. Disable them.
-# pylint: disable=E0611
+from CFNetwork import kCFNetworkProxiesHTTPEnable, kCFNetworkProxiesHTTPSEnable
 from Foundation import (
+    NSURL,
     NSBundle,
     NSDate,
     NSHTTPURLResponse,
@@ -54,11 +49,13 @@ from Foundation import (
     NSMutableURLRequest,
     NSObject,
     NSRunLoop,
-    NSURL,
     NSURLCredential,
+    NSURLCredentialPersistenceForSession,
     NSURLCredentialPersistenceNone,
     NSURLRequestReloadIgnoringLocalCacheData,
     NSURLResponseUnknownLength,
+    NSURLSession,
+    NSURLSessionConfiguration,
 )
 from objc import super
 from Security import (
@@ -94,16 +91,6 @@ objc.registerMetaDataForSelector(
     },
 )
 
-from CFNetwork import kCFNetworkProxiesHTTPEnable, kCFNetworkProxiesHTTPSEnable
-from Foundation import (
-    NSURLCredentialPersistenceForSession,
-    NSURLSession,
-    NSURLSessionConfiguration,
-)
-
-# Disable PyLint complaining about 'invalid' names
-# pylint: disable=C0103
-
 # NSURLSessionAuthChallengeDisposition enum constants
 NSURLSessionAuthChallengeUseCredential = 0
 NSURLSessionAuthChallengePerformDefaultHandling = 1
@@ -124,8 +111,6 @@ kTLSProtocol12 = 8
 kDTLSProtocol1 = 9
 
 # define a helper function for block callbacks
-import ctypes
-
 CALLBACK_HELPER_AVAILABLE = True
 try:
     _objc_so = ctypes.cdll.LoadLibrary(os.path.join(objc.__path__[0], "_objc.so"))
@@ -143,7 +128,6 @@ else:
             ctypes.create_string_buffer(signature_str), None, False
         )
 
-# pylint: enable=E0611
 
 # disturbing hack warning!
 # this works around an issue with App Transport Security on 10.11
@@ -214,15 +198,6 @@ ssl_error_codes = {
 class Gurl(NSObject):
     """A class for getting content from a URL
     using NSURLConnection/NSURLSession and friends"""
-
-    # since we inherit from NSObject, PyLint issues a few bogus warnings
-    # pylint: disable=W0232,E1002
-
-    # Don't want to define the attributes twice that are initialized in
-    # initWithOptions_(), so:
-    # pylint: disable=E1101,W0201
-
-    GURL_XATTR = "com.googlecode.munki.downloadData"
 
     def initWithOptions_(self, options):
         """Set up our Gurl object"""
@@ -351,7 +326,9 @@ class Gurl(NSObject):
         if response.className() == "NSHTTPURLResponse":
             # Headers and status code only available for HTTP/S transfers
             self.status = response.statusCode()
-            self.description = NSHTTPURLResponse.localizedStringForStatusCode_(self.status)
+            self.description = NSHTTPURLResponse.localizedStringForStatusCode_(
+                self.status
+            )
             self.headers = dict(response.allHeaderFields())
 
         if completionHandler:
@@ -428,8 +405,6 @@ class Gurl(NSObject):
         self.log("Denying redirect to: %s" % newURL)
         return denyRedirect()
 
-    # we don't control the API, so
-    # pylint: disable=too-many-arguments
     def URLSession_task_willPerformHTTPRedirection_newRequest_completionHandler_(
         self, _session, _task, response, request, completionHandler
     ):
@@ -442,8 +417,6 @@ class Gurl(NSObject):
         self.handleRedirect_newRequest_withCompletionHandler_(
             response, request, completionHandler
         )
-
-    # pylint: enable=too-many-arguments
 
     def connection_willSendRequest_redirectResponse_(
         self, _connection, request, response
@@ -656,11 +629,9 @@ class Gurl(NSObject):
         self.received_data.extend(data)
         self.bytesReceived += len(data)
         if self.expectedLength != NSURLResponseUnknownLength:
-            # pylint: disable=old-division
             self.percentComplete = int(
                 float(self.bytesReceived) / float(self.expectedLength) * 100.0
             )
-            # pylint: enable=old-division
 
     def URLSession_dataTask_didReceiveData_(self, _session, _task, data):
         """NSURLSessionDataDelegate method"""
