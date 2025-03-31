@@ -1,6 +1,6 @@
 [project]
 name = "mac-gurl"
-version = "0.1.0"
+version = "0.1.1"
 description = "Add your description here"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
