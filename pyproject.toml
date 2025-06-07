@@ -21,7 +21,14 @@ Issues = "https://github.com/toanju/mac-gurl/issues"
 Changelog = "https://github.com/toanju/mac-gurl/blob/main/CHANGELOG.md"
 
 [dependency-groups]
-dev = ["ruff>=0.9.7"]
+dev = [
+    "httpbin>=0.10.2",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.1.0",
+    "pytest-httpbin>=2.1.0",
+    "ruff>=0.9.7",
+    "trustme>=1.2.1",
+]
 
 [tool.ruff]
 # Assume Python 3.9

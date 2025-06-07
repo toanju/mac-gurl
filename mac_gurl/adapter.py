@@ -1,5 +1,6 @@
 import logging
 from io import BytesIO
+from urllib.parse import urlparse
 
 from requests import Response
 from requests.adapters import HTTPAdapter
@@ -13,7 +14,7 @@ class MacHTTPAdapter(HTTPAdapter):
     def __init__(self, *args, **kwargs):
         super(MacHTTPAdapter, self).__init__(*args, **kwargs)
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(logging.DEBUG)
 
     def send(
         self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None
@@ -41,6 +42,13 @@ class MacHTTPAdapter(HTTPAdapter):
             "download_only_if_changed": False,
             "logging_function": self.logger.debug,
         }
+
+        if verify is False:
+            parsed_request_url = urlparse(request.url)
+            options["verify_ssl"] = False
+            request.url
+            options["server_ip"] = parsed_request_url.hostname
+
         self.logger.debug("Options: %s" % options)
 
         connection = Gurl.alloc().initWithOptions_(options)
@@ -87,8 +95,7 @@ class MacHTTPAdapter(HTTPAdapter):
         if connection.error is not None:
             # gurl returned an error
             self.logger.debug(
-                "Download error %s: %s" % connection.error.code(),
-                connection.error.localizedDescription(),
+                f"Download error {connection.error.code()} {connection.error.localizedDescription()}"
             )
             if connection.SSLerror:
                 self.logger.error("SSL error detail: %s" % str(connection.SSLerror))

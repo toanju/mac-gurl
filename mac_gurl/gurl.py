@@ -133,8 +133,20 @@ else:
 # this works around an issue with App Transport Security on 10.11
 bundle = NSBundle.mainBundle()
 info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
-info["NSAppTransportSecurity"] = {"NSAllowsArbitraryLoads": True}
-
+info["NSAppTransportSecurity"] = {
+    "NSAllowsArbitraryLoads": objc.YES,
+    "NSAllowsLocalNetworking": objc.YES,
+    "NSExceptionDomains": {
+        "https://localhost": {
+            "NSIncludesSubdomains": objc.YES,
+            "NSExceptionAllowsInsecureHTTPLoads": objc.YES,
+        },
+        "localhost": {
+            "NSIncludesSubdomains": objc.YES,
+            "NSExceptionAllowsInsecureHTTPLoads": objc.YES,
+        }
+    }
+}
 
 def NSLogWrapper(message):
     """A wrapper function for NSLog to prevent format string errors"""
@@ -215,8 +227,19 @@ class Gurl(NSObject):
         self.download_only_if_changed = options.get("download_only_if_changed", False)
         self.connection_timeout = options.get("connection_timeout", 60)
         self.minimum_tls_protocol = options.get("minimum_tls_protocol", kTLSProtocol1)
-
         self.log = options.get("logging_function", NSLogWrapper)
+
+        #ip = options.get("server_ip", None)
+        #if ip is not None:
+        #    info["NSAppTransportSecurity"] = {
+        #        "NSAllowsArbitraryLoads": True,
+        #        "NSAllowsLocalNetworking": True,
+        #        "NSExceptionDomains": {
+        #            f"{ip}": {
+        #                "NSExceptionAllowsInsecureHTTPLoads": True,
+        #            }
+        #        }
+        #    }
 
         self.resume = False
         self.response = None
@@ -293,6 +316,7 @@ class Gurl(NSObject):
                 .userInfo()
                 .get("_kCFNetworkCFStreamSSLErrorOriginalValue", None)
             )
+            self.log(f"ssl_code={ssl_code}")
             if ssl_code:
                 self.SSLerror = (
                     ssl_code,
